@@ -1,0 +1,1 @@
+Our solution to the challenge statement is to create a QR-code based reward system for a local coffee shop named Cafe Voltaire. This system will all be run through a phone app which will track the user’s reward points and provide users with a roadmap for which benefits they can earn. 
