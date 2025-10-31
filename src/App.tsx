@@ -1,19 +1,134 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:3001';
-
 const CafeVoltaireApp = () => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [currentScreen, setCurrentScreen] = useState('home');
   const [points, setPoints] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('coffee');
-  const [authMode, setAuthMode] = useState('signin');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [showRedeemQR, setShowRedeemQR] = useState(null);
   
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  // Check for existing session on mount
+  useEffect(() => {
+    const savedToken = sessionStorage.getItem('cafeToken');
+    const savedUser = sessionStorage.getItem('cafeUser');
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
+      setIsAuthenticated(true);
+      fetchPointsFromBackend(savedToken);
+    }
+  }, []);
+  
+  const fetchPointsFromBackend = async (authToken) => {
+    try {
+      const response = await fetch('http://localhost:3001/rewards/points', {
+        headers: {
+          'Authorization': `Bearer ${authToken || token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPoints(data.points);
+      }
+    } catch (error) {
+      console.error('Failed to fetch points:', error);
+    }
+  };
+  
+  const handleLogin = async (email, password) => {
+    try {
+      const response = await fetch('http://localhost:3001/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setToken(data.token);
+        setUser(data.user);
+        setPoints(data.user.points);
+        setIsAuthenticated(true);
+        
+        // Save to sessionStorage
+        sessionStorage.setItem('cafeToken', data.token);
+        sessionStorage.setItem('cafeUser', JSON.stringify(data.user));
+        
+        return { success: true };
+      } else {
+        return { success: false, error: 'Invalid credentials' };
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+      return { success: false, error: 'Connection failed' };
+    }
+  };
+  
+  const handleLogout = () => {
+    setToken(null);
+    setUser(null);
+    setPoints(0);
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('cafeToken');
+    sessionStorage.removeItem('cafeUser');
+    setCurrentScreen('home');
+  };
+  
+  const earnPoints = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/rewards/earn', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amount: 50 })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPoints(data.points);
+        alert(`You earned 50 points! Total: ${data.points} points`);
+      }
+    } catch (error) {
+      console.error('Failed to earn points:', error);
+    }
+  };
+  
+  const redeemReward = async (reward) => {
+    try {
+      const response = await fetch('http://localhost:3001/rewards/redeem', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ points: reward.points })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPoints(data.points);
+        // Generate QR code data
+        const qrData = {
+          rewardName: reward.name,
+          userId: user.id,
+          timestamp: Date.now(),
+          code: Math.random().toString(36).substring(2, 15)
+        };
+        setShowRedeemQR(qrData);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Redemption failed');
+      }
+    } catch (error) {
+      console.error('Failed to redeem:', error);
+      alert('Connection failed');
+    }
+  };
 
   const menu = {
     galettes: [
@@ -67,195 +182,177 @@ const CafeVoltaireApp = () => {
   ];
 
   const promoCards = [
-    { title: 'ICED LATTE', subtitle: 'Try our new', bgColor: 'from-amber-100 to-orange-100' },
-    { title: 'CAPPUCCINO', subtitle: 'Classic favorite', bgColor: 'from-stone-100 to-amber-50' },
-    { title: 'SWEET CREPES', subtitle: 'Dessert time', bgColor: 'from-rose-100 to-pink-100' }
+    {
+      title: 'ICED LATTE',
+      subtitle: 'Try our new',
+      bgColor: 'from-amber-100 to-orange-100'
+    },
+    {
+      title: 'CAPPUCCINO',
+      subtitle: 'Classic favorite',
+      bgColor: 'from-stone-100 to-amber-50'
+    },
+    {
+      title: 'SWEET CREPES',
+      subtitle: 'Dessert time',
+      bgColor: 'from-rose-100 to-pink-100'
+    }
   ];
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('user');
+  // QR Code Generator Component (simplified pattern-based)
+  const QRCodeDisplay = ({ data }) => {
+    const qrString = JSON.stringify(data);
+    const size = 12;
     
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-      loadPoints(savedToken);
-    }
-    setLoading(false);
-  }, []);
-
-  const loadPoints = async (authToken) => {
-    try {
-      const response = await fetch(`${API_URL}/rewards/points`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setPoints(data.points);
+    // Simple hash function for demo QR pattern
+    const hashCode = (str) => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
       }
-    } catch (err) {
-      console.error('Error loading points:', err);
-    }
-  };
-
-  const handleSignIn = async () => {
-    setError('');
+      return Math.abs(hash);
+    };
     
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
+    const hash = hashCode(qrString);
     
-    try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || 'Login failed');
-        return;
-      }
-
-      const data = await response.json();
-      setToken(data.token);
-      setUser(data.user);
-      setPoints(data.user.points);
-      
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      setEmail('');
-      setPassword('');
-    } catch (err) {
-      setError('Network error. Please try again.');
-    }
-  };
-
-  const handleSignOut = () => {
-    setUser(null);
-    setToken(null);
-    setPoints(0);
-    setCurrentScreen('home');
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-  };
-
-  const earnPoints = async (amount = 50) => {
-    if (!token) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/rewards/earn`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ amount })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPoints(data.points);
-      }
-    } catch (err) {
-      console.error('Error earning points:', err);
-    }
-  };
-
-  const redeemReward = async (cost) => {
-    if (!token || points < cost) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/rewards/redeem`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ points: cost })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPoints(data.points);
-      }
-    } catch (err) {
-      console.error('Error redeeming reward:', err);
-    }
-  };
-
-  const AuthScreen = () => (
-    <div className="flex items-center justify-center min-h-screen px-6">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-amber-950 mb-2">Café Voltaire</h1>
-          <p className="text-gray-600">Welcome back!</p>
-          <p className="text-xs text-gray-500 mt-4">Demo: john@example.com / password123</p>
+    return (
+      <div className="bg-white p-6 rounded-2xl">
+        <div className="grid gap-1" style={{ 
+          gridTemplateColumns: `repeat(${size}, 1fr)`,
+          width: '240px',
+          height: '240px'
+        }}>
+          {[...Array(size * size)].map((_, i) => {
+            const x = i % size;
+            const y = Math.floor(i / size);
+            const isCorner = (x < 3 && y < 3) || (x >= size - 3 && y < 3) || (x < 3 && y >= size - 3);
+            const pattern = (hash + x * 7 + y * 13) % 2 === 0;
+            const isFilled = isCorner || pattern;
+            
+            return (
+              <div
+                key={i}
+                className={`${isFilled ? 'bg-gray-900' : 'bg-white'} rounded-sm`}
+              />
+            );
+          })}
         </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@example.com"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-900 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="password123"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-900 focus:border-transparent"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={handleSignIn}
-            className="w-full bg-amber-900 text-white py-3 rounded-lg font-semibold hover:bg-amber-800 transition-colors"
-          >
-            Sign In
-          </button>
+        <div className="text-center mt-4">
+          <p className="text-xs text-gray-500 font-mono">Code: {data.code}</p>
+          <p className="text-sm font-semibold text-gray-700 mt-2">{data.rewardName}</p>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  // Login Screen
+  const LoginScreen = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError('');
+      setIsLoading(true);
+      
+      const result = await handleLogin(email, password);
+      
+      if (result.success) {
+        setCurrentScreen('home');
+      } else {
+        setError(result.error);
+      }
+      setIsLoading(false);
+    };
+    
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-amber-950 mb-2">CAFÉ VOLTAIRE</h1>
+            <p className="text-gray-600">Sign in to your rewards account</p>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-900 focus:border-transparent"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-900 focus:border-transparent"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                {error}
+              </div>
+            )}
+            
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-amber-900 text-white font-semibold py-3 rounded-xl hover:bg-amber-800 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+          
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
+            <p className="text-xs text-blue-800">Email: john@example.com</p>
+            <p className="text-xs text-blue-800">Password: password123</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const HomeScreen = () => (
     <div className="space-y-6 pb-6">
       <div className="px-6 flex justify-between items-start">
         <div>
-          <p className="text-amber-800 text-sm font-medium mb-1">LIMITED TIME</p>
-          <h1 className="text-5xl font-bold text-amber-950 leading-tight">
-            ICED LATTE<br />IS BACK
+          <p className="text-amber-800 text-sm font-medium mb-1">WELCOME BACK</p>
+          <h1 className="text-4xl font-bold text-amber-950 leading-tight">
+            {user?.name || 'Guest'}
           </h1>
         </div>
         <button
-          onClick={handleSignOut}
-          className="text-sm text-gray-600 hover:text-gray-800 underline"
+          onClick={handleLogout}
+          className="text-sm text-gray-600 hover:text-gray-900"
         >
-          Sign Out
+          Logout
         </button>
+      </div>
+
+      <div className="px-6">
+        <p className="text-amber-800 text-sm font-medium mb-1">LIMITED TIME</p>
+        <h2 className="text-5xl font-bold text-amber-950 leading-tight">
+          ICED LATTE<br />IS BACK
+        </h2>
       </div>
 
       <div className="overflow-x-auto scrollbar-hide">
@@ -269,22 +366,13 @@ const CafeVoltaireApp = () => {
               <p className="text-amber-800 text-xs font-semibold mb-2 uppercase tracking-wide">
                 {card.subtitle}
               </p>
-              <h2 className="text-3xl font-bold text-amber-950 mb-4">
+              <h3 className="text-3xl font-bold text-amber-950 mb-4">
                 {card.title}
-              </h2>
+              </h3>
               <div className="h-32 bg-white/40 rounded-xl"></div>
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="px-6">
-        <button
-          onClick={() => earnPoints(50)}
-          className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors"
-        >
-          Simulate Purchase (+50 points)
-        </button>
       </div>
     </div>
   );
@@ -332,12 +420,27 @@ const CafeVoltaireApp = () => {
       <div className="flex items-center gap-4 mb-8">
         <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center flex-shrink-0">
           <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
           </svg>
         </div>
         <div>
           <p className="text-sm text-gray-600">You've got</p>
           <h1 className="text-4xl font-bold text-amber-950">{points} POINTS</h1>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+          TEST FEATURES
+        </h3>
+        <div className="text-center py-8 bg-white rounded-2xl border border-gray-200">
+          <p className="text-gray-600 mb-4">Test backend connection</p>
+          <button 
+            onClick={earnPoints}
+            className="px-6 py-3 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors"
+          >
+            + EARN 50 POINTS
+          </button>
         </div>
       </div>
 
@@ -349,24 +452,28 @@ const CafeVoltaireApp = () => {
           {rewards.map((reward, idx) => (
             <button
               key={idx}
-              onClick={() => redeemReward(reward.points)}
               disabled={points < reward.points}
+              onClick={() => redeemReward(reward)}
               className={`w-full bg-white rounded-2xl p-5 border transition-all text-left ${
                 points >= reward.points
-                  ? 'border-gray-200 hover:border-amber-300 hover:shadow-md cursor-pointer'
+                  ? 'border-gray-200 hover:border-amber-300 hover:shadow-md'
                   : 'border-gray-200 opacity-50 cursor-not-allowed'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-xl"></div>
+                  <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl flex items-center justify-center">
+                    <svg className="w-8 h-8 text-amber-900" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"/>
+                    </svg>
+                  </div>
                   <div>
                     <h3 className="font-bold text-gray-800 text-lg">{reward.name}</h3>
                     <p className="text-sm text-gray-600">{reward.points} Points</p>
                   </div>
                 </div>
                 {points >= reward.points && (
-                  <span className="text-amber-900 font-semibold text-sm">Redeem</span>
+                  <span className="text-amber-900 font-semibold">Redeem →</span>
                 )}
               </div>
             </button>
@@ -379,16 +486,16 @@ const CafeVoltaireApp = () => {
   const ScanScreen = () => (
     <div className="flex flex-col items-center space-y-8">
       <div className="text-center">
-        <p className="text-amber-800 text-sm font-medium mb-2">FORGOT TO SCAN?</p>
-        <h2 className="text-4xl font-bold text-amber-950 mb-2">SCAN BEFORE PAYING</h2>
-        <p className="text-gray-600">To earn points.</p>
+        <p className="text-amber-800 text-sm font-medium mb-2">MEMBER CARD</p>
+        <h2 className="text-4xl font-bold text-amber-950 mb-2">SCAN TO EARN</h2>
+        <p className="text-gray-600">Show this at checkout</p>
       </div>
 
       <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-lg relative">
         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
           <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
           </div>
         </div>
@@ -402,10 +509,9 @@ const CafeVoltaireApp = () => {
         </div>
 
         <div className="text-center">
-          <p className="text-sm font-semibold text-gray-600 mb-1">MEMBER CARD</p>
-          <p className="text-xl font-bold text-gray-800">{user?.name || 'User'}</p>
-          <p className="text-sm text-gray-600">{user?.email}</p>
-          <p className="text-sm font-mono text-gray-600 mt-1">#{user?.id || '0000000'}</p>
+          <p className="text-sm font-semibold text-gray-600 mb-1">MEMBER</p>
+          <p className="text-xl font-bold text-gray-800">{user?.name || 'Guest'}</p>
+          <p className="text-sm font-mono text-gray-600 mt-1">#{user?.id || '0000'}</p>
         </div>
       </div>
 
@@ -420,24 +526,48 @@ const CafeVoltaireApp = () => {
     </div>
   );
 
-  if (loading) {
-    return (
-      <div className="max-w-md mx-auto bg-stone-50 min-h-screen flex items-center justify-center">
-        <div className="text-amber-900 text-xl font-semibold">Loading...</div>
+  // QR Modal for redeemed rewards
+  const RedeemQRModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-6 z-50">
+      <div className="bg-stone-50 rounded-3xl p-8 max-w-sm w-full">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Reward Redeemed!</h2>
+          <p className="text-gray-600">Show this QR code to staff</p>
+        </div>
+        
+        <div className="flex justify-center mb-6">
+          <QRCodeDisplay data={showRedeemQR} />
+        </div>
+        
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+          <p className="text-sm text-amber-900 text-center">
+            Valid for 15 minutes from redemption
+          </p>
+        </div>
+        
+        <button
+          onClick={() => setShowRedeemQR(null)}
+          className="w-full bg-gray-900 text-white font-semibold py-3 rounded-xl hover:bg-gray-800 transition-colors"
+        >
+          Done
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!user) {
-    return (
-      <div className="max-w-md mx-auto bg-stone-50 min-h-screen">
-        <AuthScreen />
-      </div>
-    );
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen />;
   }
 
   return (
     <div className="max-w-md mx-auto bg-stone-50 min-h-screen flex flex-col">
+      {/* Content */}
       <div className="flex-1 pt-6 pb-24 overflow-y-auto">
         <div className="px-6">
           {currentScreen === 'home' && <HomeScreen />}
@@ -447,6 +577,7 @@ const CafeVoltaireApp = () => {
         </div>
       </div>
 
+      {/* Bottom Navigation */}
       <div className="bg-white border-t border-gray-200 px-8 py-4 fixed bottom-0 left-0 right-0 max-w-md mx-auto">
         <div className="flex items-center justify-between">
           <button
@@ -483,6 +614,9 @@ const CafeVoltaireApp = () => {
           </button>
         </div>
       </div>
+      
+      {/* QR Modal */}
+      {showRedeemQR && <RedeemQRModal />}
     </div>
   );
 };
