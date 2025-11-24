@@ -7,7 +7,9 @@
     "dev:frontend": "vite",
     "build": "tsc",
     "build:frontend": "vite build",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed:codes": "node firebase-scripts/seedEarnCodes.js",
+    "seed:users": "node firebase-scripts/seedUsers.js"
   },
   "dependencies": {
     "@types/react": "^18.2.0",
