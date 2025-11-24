@@ -9,5 +9,8 @@ yarn-error.log*
 node_modules/
 dist/
 *.log
-
+firebase-scripts/*.json
+*.json
+!package.json
+!firebase.json
 
