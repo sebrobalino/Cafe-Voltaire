@@ -1,61 +1,35 @@
 import React, { useState, useEffect } from "react";
-import { db, auth, addPointsFromQr } from "./firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { signInAnonymously } from "firebase/auth";
+import { getDemoUserPoints, addPointsFromQr } from "./firebase";
 
 const CafeVoltaireApp: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<"home" | "menu" | "rewards" | "scan">("home");
   const [points, setPoints] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState("coffee");
 
-  // ---------- Firebase helpers ----------
-
-  const ensureSignedIn = async () => {
-    if (!auth.currentUser) {
-      await signInAnonymously(auth);
-    }
-  };
-
-  const loadPointsFromFirestore = async () => {
-    try {
-      await ensureSignedIn();
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
-
-      const currentPoints = snap.exists()
-        ? (snap.data().pointTotal as number | undefined) ?? 0
-        : 0;
-
-      setPoints(currentPoints);
-    } catch (error) {
-      console.error("Failed to load points from Firestore:", error);
-    }
-  };
+  // Load points from Firestore on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const current = await getDemoUserPoints();
+        setPoints(current);
+      } catch (error) {
+        console.error("Failed to load points from Firestore:", error);
+      }
+    };
+    load();
+  }, []);
 
   const earnPoints = async () => {
     try {
-      await ensureSignedIn();
-      // For now, simulate a QR scan with a hardcoded code ID.
-      // Make sure preGeneratedEarnCodes/COFFEE_BOOST_1 exists with a pointValue.
+      // Uses preGeneratedEarnCodes/COFFEE_BOOST_1
       const newTotal = await addPointsFromQr("COFFEE_BOOST_1");
       setPoints(newTotal);
       alert(`You earned points! Total: ${newTotal} points`);
-    } catch (error) {
-      console.error("Failed to earn points:", error);
-      alert("Failed to earn points. Check console for details.");
+    } catch (err: any) {
+      console.error("Failed to earn points:", err);
+      alert(err?.message ?? "Failed to earn points. Check console for details.");
     }
   };
-
-  // Load points on mount
-  useEffect(() => {
-    loadPointsFromFirestore();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ---------- Static menu/rewards data ----------
 
   const menu = {
     galettes: [
@@ -99,7 +73,7 @@ const CafeVoltaireApp: React.FC = () => {
       { name: "Mexi-Coke", price: 4.5, desc: "" },
       { name: "Fresh Orange Juice", price: 5.0, desc: "" },
     ],
-  } as const;
+  };
 
   const rewards = [
     { name: "Espresso", points: 500 },
@@ -125,8 +99,6 @@ const CafeVoltaireApp: React.FC = () => {
       bgColor: "from-rose-100 to-pink-100",
     },
   ];
-
-  // ---------- Screens ----------
 
   const HomeScreen = () => (
     <div className="space-y-6 pb-6">
@@ -185,7 +157,9 @@ const CafeVoltaireApp: React.FC = () => {
                 <h3 className="font-semibold text-gray-800">{item.name}</h3>
                 {item.desc && <p className="text-sm text-gray-500 mt-1">{item.desc}</p>}
               </div>
-              <span className="text-lg font-bold text-amber-900 ml-4">${item.price.toFixed(2)}</span>
+              <span className="text-lg font-bold text-amber-900 ml-4">
+                ${item.price.toFixed(2)}
+              </span>
             </div>
           </div>
         ))}
@@ -212,7 +186,7 @@ const CafeVoltaireApp: React.FC = () => {
           READY TO USE
         </h3>
         <div className="text-center py-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Firestore Connection</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Firestore QR Test</h2>
           <p className="text-gray-600 mb-6">
             Test your QR earn code by adding points from Firestore.
           </p>
