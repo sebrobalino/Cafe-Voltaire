@@ -1,6 +1,5 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
 import {
   getFirestore,
   doc,
@@ -19,50 +18,45 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// ... addPointsFromQr function here (the one we wrote earlier)
+// 🔐 For demo: we just use a fixed user id
+const DEMO_USER_ID = "demo-user-1";
 
-
-/**
- * Add points to the current user based on a QR code ID.
- * QR is fully re-scannable: every call just adds pointValue again.
- */
-export async function addPointsFromQr(codeId: string): Promise<number> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("User must be logged in to earn points.");
+// Get current points for the demo user
+export async function getDemoUserPoints(): Promise<number> {
+  const ref = doc(db, "users", DEMO_USER_ID);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    return 0;
   }
+  return (snap.data().pointTotal as number | undefined) ?? 0;
+}
 
+// Add points based on a QR code (rescannable)
+export async function addPointsFromQr(codeId: string): Promise<number> {
   const codeRef = doc(db, "preGeneratedEarnCodes", codeId);
-  const userRef = doc(db, "users", user.uid);
+  const userRef = doc(db, "users", DEMO_USER_ID);
 
-  const newTotal = await runTransaction(db, async (tx) => {
-    // 1. Read the earn code
+  const updatedTotal = await runTransaction(db, async (tx) => {
     const codeSnap = await tx.get(codeRef);
     if (!codeSnap.exists()) {
       throw new Error("Invalid QR code.");
     }
+
     const pointValue = codeSnap.data().pointValue ?? 0;
 
-    // 2. Read current user points
     const userSnap = await tx.get(userRef);
     const currentPoints = userSnap.exists()
       ? userSnap.data().pointTotal ?? 0
       : 0;
 
-    const updatedTotal = currentPoints + pointValue;
+    const newTotal = currentPoints + pointValue;
 
-    // 3. Write updated points back
-    tx.set(
-      userRef,
-      { pointTotal: updatedTotal },
-      { merge: true }
-    );
+    tx.set(userRef, { pointTotal: newTotal }, { merge: true });
 
-    return updatedTotal;
+    return newTotal;
   });
 
-  return newTotal;
+  return updatedTotal;
 }
