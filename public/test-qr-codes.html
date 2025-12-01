@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test QR Codes</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        .qr-container { display: inline-block; margin: 20px; padding: 20px; border: 1px solid #ccc; border-radius: 10px; }
+        img { display: block; margin: 0 auto; }
+        h3 { margin-top: 10px; color: #333; }
+        p { color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Test QR Codes</h1>
+    <p>Scan these codes with the Cafe Voltaire app to earn points.</p>
+
+    <div class="qr-container">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=COFFEE_BOOST_1" alt="COFFEE_BOOST_1">
+        <h3>COFFEE_BOOST_1</h3>
+        <p>25 Points</p>
+    </div>
+
+    <div class="qr-container">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=WELCOME_5" alt="WELCOME_5">
+        <h3>WELCOME_5</h3>
+        <p>5 Points</p>
+    </div>
+
+    <div class="qr-container">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HAPPY_HOUR_10" alt="HAPPY_HOUR_10">
+        <h3>HAPPY_HOUR_10</h3>
+        <p>10 Points</p>
+    </div>
+</body>
+</html>

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --host",
     "build": "tsc",
     "build:frontend": "vite build",
     "start": "node dist/server.js",
@@ -17,6 +17,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "firebase": "^12.6.0",
+    "html5-qrcode": "^2.3.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
