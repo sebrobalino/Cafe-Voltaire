@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { getDemoUserPoints, addPointsFromQr } from "./firebase";
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 const CafeVoltaireApp: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<"home" | "menu" | "rewards" | "scan">("home");
@@ -138,11 +139,10 @@ const CafeVoltaireApp: React.FC = () => {
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              selectedCategory === cat
-                ? "bg-amber-900 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat
+              ? "bg-amber-900 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
           >
             {cat.charAt(0).toUpperCase() + cat.slice(1)}
           </button>
@@ -208,11 +208,10 @@ const CafeVoltaireApp: React.FC = () => {
             <button
               key={idx}
               disabled={points < reward.points}
-              className={`w-full bg-white rounded-2xl p-5 border transition-all text-left ${
-                points >= reward.points
-                  ? "border-gray-200 hover:border-amber-300 hover:shadow-md"
-                  : "border-gray-200 opacity-50"
-              }`}
+              className={`w-full bg-white rounded-2xl p-5 border transition-all text-left ${points >= reward.points
+                ? "border-gray-200 hover:border-amber-300 hover:shadow-md"
+                : "border-gray-200 opacity-50"
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -230,53 +229,85 @@ const CafeVoltaireApp: React.FC = () => {
     </div>
   );
 
-  const ScanScreen = () => (
-    <div className="flex flex-col items-center space-y-8">
-      <div className="text-center">
-        <p className="text-amber-800 text-sm font-medium mb-2">FORGOT TO SCAN?</p>
-        <h2 className="text-4xl font-bold text-amber-950 mb-2">SCAN BEFORE PAYING</h2>
-        <p className="text-gray-600">To earn points.</p>
-      </div>
+  const ScanScreen = () => {
+    const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);
 
-      <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-lg relative">
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
-          <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-            </svg>
-          </div>
+    useEffect(() => {
+      // If scanner already exists, don't create another one
+      if (scannerRef.current) {
+        return;
+      }
+
+      // Manual cleanup: Ensure the container is empty before rendering the scanner
+      // This helps with React Strict Mode where cleanup might be async or incomplete
+      const readerElement = document.getElementById("reader");
+      if (readerElement) {
+        readerElement.innerHTML = "";
+      }
+
+      const scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        /* verbose= */ false
+      );
+
+      scannerRef.current = scanner;
+
+      const onScanSuccess = async (decodedText: string) => {
+        // Stop scanning after success
+        try {
+          await scanner.clear();
+          scannerRef.current = null;
+        } catch (e) {
+          console.error("Failed to clear scanner", e);
+        }
+
+        try {
+          const newTotal = await addPointsFromQr(decodedText);
+          setPoints(newTotal);
+          alert(`Success! You earned points. Total: ${newTotal}`);
+        } catch (err: any) {
+          console.error("Scan error:", err);
+          alert(err.message || "Failed to add points");
+          // Ideally we might want to re-initialize scanner here if they want to scan again
+          // But for now, let's leave it cleared or reload the page/component
+        }
+      };
+
+      const onScanFailure = (error: any) => {
+        // handle scan failure
+      };
+
+      scanner.render(onScanSuccess, onScanFailure);
+
+      // Cleanup function
+      return () => {
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch((error) => {
+            console.error("Failed to clear html5-qrcode scanner. ", error);
+          });
+          scannerRef.current = null;
+        }
+      };
+    }, []);
+
+    return (
+      <div className="flex flex-col items-center space-y-8">
+        <div className="text-center">
+          <h2 className="text-4xl font-bold text-amber-950 mb-2">SCAN QR CODE</h2>
+          <p className="text-gray-600">Scan a code to earn points.</p>
         </div>
 
-        <div className="w-64 h-64 bg-gray-900 rounded-2xl flex items-center justify-center mb-6 mt-4">
-          <div className="grid grid-cols-3 gap-2 w-48 h-48">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div
-                key={i}
-                className={`${
-                  i % 2 === 0 ? "bg-white" : "bg-gray-900 border-2 border-white"
-                } rounded`}
-              ></div>
-            ))}
-          </div>
+        <div className="w-full max-w-sm bg-white rounded-3xl p-4 border border-gray-200 shadow-lg">
+          <div id="reader" width="100%"></div>
         </div>
 
         <div className="text-center">
-          <p className="text-sm font-semibold text-gray-600 mb-1">MEMBER CARD</p>
-          <p className="text-xl font-bold text-gray-800">John Smith</p>
-          <p className="text-sm font-mono text-gray-600 mt-1">#5297735</p>
+          <p className="text-xs text-gray-500">Ensure good lighting for best results.</p>
         </div>
       </div>
-
-      <button className="px-8 py-3 bg-gray-900 text-white font-semibold rounded-full hover:bg-gray-800 transition-colors flex items-center gap-2">
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z" />
-        </svg>
-        Add to Apple Wallet
-      </button>
-
-      <p className="text-xs text-gray-500">For use in the U.S. only.</p>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="max-w-md mx-auto bg-stone-50 min-h-screen flex flex-col">
@@ -295,41 +326,37 @@ const CafeVoltaireApp: React.FC = () => {
         <div className="flex items-center justify-between">
           <button
             onClick={() => setCurrentScreen("home")}
-            className={`text-sm font-bold uppercase tracking-wide transition-colors ${
-              currentScreen === "home"
-                ? "text-amber-900 underline decoration-2 underline-offset-4"
-                : "text-gray-800"
-            }`}
+            className={`text-sm font-bold uppercase tracking-wide transition-colors ${currentScreen === "home"
+              ? "text-amber-900 underline decoration-2 underline-offset-4"
+              : "text-gray-800"
+              }`}
           >
             Home
           </button>
           <button
             onClick={() => setCurrentScreen("menu")}
-            className={`text-sm font-bold uppercase tracking-wide transition-colors ${
-              currentScreen === "menu"
-                ? "text-amber-900 underline decoration-2 underline-offset-4"
-                : "text-gray-800"
-            }`}
+            className={`text-sm font-bold uppercase tracking-wide transition-colors ${currentScreen === "menu"
+              ? "text-amber-900 underline decoration-2 underline-offset-4"
+              : "text-gray-800"
+              }`}
           >
             Menu
           </button>
           <button
             onClick={() => setCurrentScreen("rewards")}
-            className={`text-sm font-bold uppercase tracking-wide transition-colors ${
-              currentScreen === "rewards"
-                ? "text-amber-900 underline decoration-2 underline-offset-4"
-                : "text-gray-800"
-            }`}
+            className={`text-sm font-bold uppercase tracking-wide transition-colors ${currentScreen === "rewards"
+              ? "text-amber-900 underline decoration-2 underline-offset-4"
+              : "text-gray-800"
+              }`}
           >
             Rewards
           </button>
           <button
             onClick={() => setCurrentScreen("scan")}
-            className={`text-sm font-bold uppercase tracking-wide transition-colors ${
-              currentScreen === "scan"
-                ? "text-amber-900 underline decoration-2 underline-offset-4"
-                : "text-gray-800"
-            }`}
+            className={`text-sm font-bold uppercase tracking-wide transition-colors ${currentScreen === "scan"
+              ? "text-amber-900 underline decoration-2 underline-offset-4"
+              : "text-gray-800"
+              }`}
           >
             Scan
           </button>
