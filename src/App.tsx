@@ -358,7 +358,7 @@ const CafeVoltaireApp: React.FC = () => {
   };
 
   const HomeScreen = () => (
-    <div className="space-y-6 pb-6">
+    <div className="pb-6">
       <div className="px-6 flex justify-between items-start">
         <div>
           <p className="text-amber-800 text-sm font-medium mb-1">WELCOME BACK</p>
@@ -375,15 +375,16 @@ const CafeVoltaireApp: React.FC = () => {
       </div>
 
       <div className="px-6">
-        <div className="flex items-center gap-2 mb-2">
-          <p className="text-amber-800 text-sm font-medium">LIMITED TIME</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-amber-800 text-sm font-medium mr-2">LIMITED TIME</p>
           <img
             src="/Cafe_logo.png"
             alt="Cafe Voltaire"
-            className="w-16"
+            className="w-20"
+            style={{ transform: 'rotate(20deg)' }}
           />
         </div>
-        <h2 className="text-5xl font-bold text-amber-950 leading-tight">
+        <h2 className="text-5xl font-bold text-amber-950 leading-tight text-center">
           ICED LATTE<br />IS BACK
         </h2>
         <img
