@@ -197,8 +197,21 @@ const CafeVoltaireApp = () => {
   const HomeScreen = () => (
     <div className="space-y-6 pb-6">
       <div className="px-6">
-        <p className="text-amber-800 text-sm font-medium mb-1">LIMITED TIME</p>
-        <h1 className="text-5xl font-bold text-amber-950 leading-tight">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-amber-800 text-sm font-medium">LIMITED TIME</p>
+          <img
+            src="/Cafe_logo.png"
+            alt="Cafe Voltaire"
+            className="w-16"
+            style={{ transform: "rotate(30deg) scale(1.15)" }}
+          />
+        </div>
+        <img
+          src="/iced_coffee.png"
+          alt="Iced coffee"
+          className="w-3/5 mx-auto my-4 drop-shadow-lg"
+        />
+        <h1 className="text-5xl font-bold text-amber-950 leading-tight text-center">
           ICED LATTE
           <br />
           IS BACK
@@ -207,19 +220,50 @@ const CafeVoltaireApp = () => {
 
       <div className="overflow-x-auto scrollbar-hide">
         <div className="flex gap-4 px-6">
-          {promoCards.map((card, idx) => (
-            <div
-              key={idx}
-              className={`flex-shrink-0 bg-gradient-to-br ${card.bgColor} rounded-2xl p-6 shadow-sm`}
-              style={{ width: "80vw", maxWidth: "320px" }}
-            >
-              <p className="text-amber-800 text-xs font-semibold mb-2 uppercase tracking-wide">
-                {card.subtitle}
-              </p>
-              <h2 className="text-3xl font-bold text-amber-950 mb-4">{card.title}</h2>
-              <div className="h-32 bg-white/40 rounded-xl"></div>
-            </div>
-          ))}
+          {promoCards.map((card, idx) => {
+            const { bgClass, imageSrc, alt } =
+              card.title === "ICED LATTE"
+                ? {
+                    bgClass: "bg-amber-100",
+                    imageSrc: "/matcha1.png",
+                    alt: "Matcha latte",
+                  }
+                : card.title === "CAPPUCCINO"
+                ? {
+                    bgClass: "bg-white/40",
+                    imageSrc: "/cappuccino.png",
+                    alt: "Cappuccino",
+                  }
+                : card.title === "SWEET CREPES"
+                ? {
+                    bgClass: "bg-white/40",
+                    imageSrc: "/crepe.png",
+                    alt: "Crepe",
+                  }
+                : { bgClass: "bg-white/40", imageSrc: null, alt: "" };
+
+            return (
+              <div
+                key={idx}
+                className={`flex-shrink-0 bg-gradient-to-br ${card.bgColor} rounded-2xl p-6 shadow-sm`}
+                style={{ width: "80vw", maxWidth: "320px" }}
+              >
+                <p className="text-amber-800 text-xs font-semibold mb-2 uppercase tracking-wide">
+                  {card.subtitle}
+                </p>
+                <h2 className="text-3xl font-bold text-amber-950 mb-4">
+                  {card.title === "ICED LATTE" ? "MATCHA LATTE" : card.title}
+                </h2>
+                <div
+                  className={`h-32 rounded-xl overflow-hidden flex items-center justify-center ${bgClass}`}
+                >
+                  {imageSrc ? (
+                    <img src={imageSrc} alt={alt} className="h-full object-cover" />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
