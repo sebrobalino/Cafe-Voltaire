@@ -1,25 +1,51 @@
 import React, { useState, useEffect } from "react";
 import { auth } from "./firebase";
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+} from "firebase/auth";
 
-// LOGIN SCREEN
+
+// LOGIN + SIGNUP SCREEN
+
 const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSignup, setIsSignup] = useState(false);
 
-  const handleLogin = async () => {
+  const handleSubmit = async () => {
+    setError("");
+
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (isSignup) {
+        // SIGNUP
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        // LOGIN
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
       onLogin();
     } catch (err: any) {
-      setError("Invalid email or password.");
+      if (err.code === "auth/email-already-in-use") {
+        setError("Email already in use.");
+      } else if (err.code === "auth/invalid-credential") {
+        setError("Invalid email or password.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password must be 6+ characters.");
+      } else {
+        setError("Authentication error.");
+      }
     }
   };
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col justify-center px-6 bg-stone-50">
-      <h1 className="text-4xl font-bold text-amber-900 mb-8 text-center">Café Voltaire</h1>
+      <h1 className="text-4xl font-bold text-amber-900 mb-8 text-center">
+        Café Voltaire
+      </h1>
 
       <div className="space-y-4">
         <input
@@ -39,17 +65,31 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
         {error && <p className="text-red-600 text-center">{error}</p>}
 
         <button
-          onClick={handleLogin}
+          onClick={handleSubmit}
           className="w-full py-3 bg-amber-900 text-white rounded-lg font-semibold hover:bg-amber-800"
         >
-          Login
+          {isSignup ? "Create Account" : "Login"}
         </button>
+
+        {/* SIGNUP / LOGIN TOGGLE */}
+        <p className="text-center text-sm text-gray-700 mt-2">
+          {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
+          <button
+            className="text-amber-900 font-semibold"
+            onClick={() => {
+              setError("");
+              setIsSignup(!isSignup);
+            }}
+          >
+            {isSignup ? "Log in" : "Create one"}
+          </button>
+        </p>
       </div>
     </div>
   );
 };
 
-// FULL CAFÉ VOLTAIRE APP (YOUR EXACT UI)
+
 const CafeVoltaireApp = () => {
   const [currentScreen, setCurrentScreen] = useState("home");
   const [points, setPoints] = useState(450);
@@ -154,13 +194,14 @@ const CafeVoltaireApp = () => {
     { title: "SWEET CREPES", subtitle: "Dessert time", bgColor: "from-rose-100 to-pink-100" },
   ];
 
-
   const HomeScreen = () => (
     <div className="space-y-6 pb-6">
       <div className="px-6">
         <p className="text-amber-800 text-sm font-medium mb-1">LIMITED TIME</p>
         <h1 className="text-5xl font-bold text-amber-950 leading-tight">
-          ICED LATTE<br />IS BACK
+          ICED LATTE
+          <br />
+          IS BACK
         </h1>
       </div>
 
@@ -225,7 +266,7 @@ const CafeVoltaireApp = () => {
       <div className="flex items-center gap-4 mb-8">
         <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center">
           <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
           </svg>
         </div>
         <div>
@@ -296,7 +337,7 @@ const CafeVoltaireApp = () => {
         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
           <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
             </svg>
           </div>
         </div>
@@ -304,7 +345,12 @@ const CafeVoltaireApp = () => {
         <div className="w-64 h-64 bg-gray-900 rounded-2xl flex items-center justify-center mb-6 mt-4">
           <div className="grid grid-cols-3 gap-2 w-48 h-48">
             {[...Array(9)].map((_, i) => (
-              <div key={i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-900 border-2 border-white"} rounded`}></div>
+              <div
+                key={i}
+                className={`${
+                  i % 2 === 0 ? "bg-white" : "bg-gray-900 border-2 border-white"
+                } rounded`}
+              ></div>
             ))}
           </div>
         </div>
@@ -318,7 +364,7 @@ const CafeVoltaireApp = () => {
 
       <button className="px-8 py-3 bg-gray-900 text-white font-semibold rounded-full hover:bg-gray-800 flex items-center gap-2">
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
+          <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z" />
         </svg>
         Add to Apple Wallet
       </button>
@@ -327,7 +373,6 @@ const CafeVoltaireApp = () => {
     </div>
   );
 
-  // RENDER ENTIRE APP
   return (
     <div className="max-w-md mx-auto bg-stone-50 min-h-screen flex flex-col">
       <div className="flex-1 pt-6 pb-24 overflow-y-auto">
@@ -339,37 +384,47 @@ const CafeVoltaireApp = () => {
         </div>
       </div>
 
-      {/* Bottom Nav */}
       <div className="bg-white border-t border-gray-200 px-8 py-4 fixed bottom-0 left-0 right-0 max-w-md mx-auto">
         <div className="flex items-center justify-between">
           <button
             onClick={() => setCurrentScreen("home")}
             className={`text-sm font-bold uppercase ${
-              currentScreen === "home" ? "text-amber-900 underline decoration-2" : "text-gray-800"
+              currentScreen === "home"
+                ? "text-amber-900 underline decoration-2"
+                : "text-gray-800"
             }`}
           >
             Home
           </button>
+
           <button
             onClick={() => setCurrentScreen("menu")}
             className={`text-sm font-bold uppercase ${
-              currentScreen === "menu" ? "text-amber-900 underline decoration-2" : "text-gray-800"
+              currentScreen === "menu"
+                ? "text-amber-900 underline decoration-2"
+                : "text-gray-800"
             }`}
           >
             Menu
           </button>
+
           <button
             onClick={() => setCurrentScreen("rewards")}
             className={`text-sm font-bold uppercase ${
-              currentScreen === "rewards" ? "text-amber-900 underline decoration-2" : "text-gray-800"
+              currentScreen === "rewards"
+                ? "text-amber-900 underline decoration-2"
+                : "text-gray-800"
             }`}
           >
             Rewards
           </button>
+
           <button
             onClick={() => setCurrentScreen("scan")}
             className={`text-sm font-bold uppercase ${
-              currentScreen === "scan" ? "text-amber-900 underline decoration-2" : "text-gray-800"
+              currentScreen === "scan"
+                ? "text-amber-900 underline decoration-2"
+                : "text-gray-800"
             }`}
           >
             Scan
@@ -387,7 +442,8 @@ const CafeVoltaireApp = () => {
   );
 };
 
-// ROOT APP (AUTH GATE)
+// AUTH GATE
+
 const App = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
