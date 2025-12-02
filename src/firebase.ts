@@ -1,5 +1,6 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import {
   getFirestore,
   doc,
@@ -18,14 +19,12 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// 🔐 For demo: we just use a fixed user id
-const DEMO_USER_ID = "demo-user-1";
-
-// Get current points for the demo user
-export async function getDemoUserPoints(): Promise<number> {
-  const ref = doc(db, "users", DEMO_USER_ID);
+// Get current points for a user
+export async function getUserPoints(userId: string): Promise<number> {
+  const ref = doc(db, "users", userId);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     return 0;
@@ -34,9 +33,9 @@ export async function getDemoUserPoints(): Promise<number> {
 }
 
 // Add points based on a QR code (rescannable)
-export async function addPointsFromQr(codeId: string): Promise<number> {
+export async function addPointsFromQr(userId: string, codeId: string): Promise<number> {
   const codeRef = doc(db, "preGeneratedEarnCodes", codeId);
-  const userRef = doc(db, "users", DEMO_USER_ID);
+  const userRef = doc(db, "users", userId);
 
   const updatedTotal = await runTransaction(db, async (tx) => {
     const codeSnap = await tx.get(codeRef);

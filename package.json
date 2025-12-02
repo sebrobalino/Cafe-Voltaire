@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
-    "dev:server": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:server": "ts-node-dev --respawn --transpile-only --project tsconfig.json server/server.ts",
     "dev:frontend": "vite --host",
     "build": "npm run build:server && npm run build:frontend",
     "build:server": "tsc",
