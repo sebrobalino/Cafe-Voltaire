@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { getDemoUserPoints, addPointsFromQr } from "./firebase";
+import { auth, addPointsFromQr } from "./firebase";
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  User as FirebaseUser
+} from "firebase/auth";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
 const CafeVoltaireApp: React.FC = () => {
@@ -7,27 +14,52 @@ const CafeVoltaireApp: React.FC = () => {
   const [points, setPoints] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState("coffee");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [showRedeemQR, setShowRedeemQR] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing session on mount
+  // Monitor Firebase Auth state
   useEffect(() => {
-    const savedToken = sessionStorage.getItem('cafeToken');
-    const savedUser = sessionStorage.getItem('cafeUser');
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-      setIsAuthenticated(true);
-      fetchPointsFromBackend(savedToken);
-    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsLoading(false);
+      if (user) {
+        setFirebaseUser(user);
+        setIsAuthenticated(true);
+      } else {
+        setFirebaseUser(null);
+        setIsAuthenticated(false);
+        setPoints(0);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const fetchPointsFromBackend = async (authToken: string) => {
+  // Fetch points whenever firebaseUser changes
+  useEffect(() => {
+    if (firebaseUser) {
+      fetchPointsFromBackend();
+    }
+  }, [firebaseUser]);
+
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!firebaseUser) return null;
+    try {
+      return await firebaseUser.getIdToken();
+    } catch (error) {
+      console.error('Failed to get auth token:', error);
+      return null;
+    }
+  };
+
+  const fetchPointsFromBackend = async () => {
+    const token = await getAuthToken();
+    if (!token) return;
+
     try {
       const response = await fetch('http://localhost:3001/rewards/points', {
         headers: {
-          'Authorization': `Bearer ${authToken || token}`
+          'Authorization': `Bearer ${token}`
         }
       });
       if (response.ok) {
@@ -39,53 +71,25 @@ const CafeVoltaireApp: React.FC = () => {
     }
   };
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogout = async () => {
     try {
-      const response = await fetch('http://localhost:3001/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setToken(data.token);
-        setUser(data.user);
-        setPoints(data.user.points);
-        setIsAuthenticated(true);
-        
-        // Save to sessionStorage
-        sessionStorage.setItem('cafeToken', data.token);
-        sessionStorage.setItem('cafeUser', JSON.stringify(data.user));
-        
-        return { success: true };
-      } else {
-        return { success: false, error: 'Invalid credentials' };
-      }
+      await signOut(auth);
+      setCurrentScreen('home');
     } catch (error) {
-      console.error('Login failed:', error);
-      return { success: false, error: 'Connection failed' };
+      console.error('Logout failed:', error);
     }
   };
 
-  const handleLogout = () => {
-    setToken(null);
-    setUser(null);
-    setPoints(0);
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('cafeToken');
-    sessionStorage.removeItem('cafeUser');
-    setCurrentScreen('home');
-  };
-
   const earnPoints = async () => {
+    if (!firebaseUser) return;
+    
     try {
       // Uses preGeneratedEarnCodes/COFFEE_BOOST_1
-      const newTotal = await addPointsFromQr("COFFEE_BOOST_1");
+      const newTotal = await addPointsFromQr(firebaseUser.uid, "COFFEE_BOOST_1");
       setPoints(newTotal);
       alert(`You earned points! Total: ${newTotal} points`);
+      // Also update backend
+      await fetchPointsFromBackend();
     } catch (err: any) {
       console.error("Failed to earn points:", err);
       alert(err?.message ?? "Failed to earn points. Check console for details.");
@@ -93,6 +97,9 @@ const CafeVoltaireApp: React.FC = () => {
   };
 
   const redeemReward = async (reward: { name: string; points: number }) => {
+    const token = await getAuthToken();
+    if (!token) return;
+
     try {
       const response = await fetch('http://localhost:3001/rewards/redeem', {
         method: 'POST',
@@ -109,7 +116,7 @@ const CafeVoltaireApp: React.FC = () => {
         // Generate QR code data
         const qrData = {
           rewardName: reward.name,
-          userId: user.id,
+          userId: firebaseUser?.uid,
           timestamp: Date.now(),
           code: Math.random().toString(36).substring(2, 15)
         };
@@ -241,26 +248,41 @@ const CafeVoltaireApp: React.FC = () => {
     );
   };
 
-  // Login Screen
+  // Login/Signup Screen
   const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isSignup, setIsSignup] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setError('');
-      setIsLoading(true);
+      setIsSubmitting(true);
       
-      const result = await handleLogin(email, password);
-      
-      if (result.success) {
-        setCurrentScreen('home');
-      } else {
-        setError(result.error || 'Login failed');
+      try {
+        if (isSignup) {
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
+        } else {
+          await signInWithEmailAndPassword(auth, email.trim(), password);
+        }
+        // Auth state change will be handled by onAuthStateChanged
+      } catch (err: any) {
+        if (err.code === 'auth/email-already-in-use') {
+          setError('Email already in use. Please sign in instead.');
+        } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+          setError('Invalid email or password.');
+        } else if (err.code === 'auth/weak-password') {
+          setError('Password should be at least 6 characters.');
+        } else if (err.code === 'auth/invalid-email') {
+          setError('Invalid email address.');
+        } else {
+          setError(err.message || 'Authentication failed');
+        }
+      } finally {
+        setIsSubmitting(false);
       }
-      setIsLoading(false);
     };
     
     return (
@@ -268,7 +290,9 @@ const CafeVoltaireApp: React.FC = () => {
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-amber-950 mb-2">CAFÉ VOLTAIRE</h1>
-            <p className="text-gray-600">Sign in to your rewards account</p>
+            <p className="text-gray-600">
+              {isSignup ? 'Create your rewards account' : 'Sign in to your rewards account'}
+            </p>
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -297,6 +321,7 @@ const CafeVoltaireApp: React.FC = () => {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-900 focus:border-transparent"
                 placeholder="••••••••"
                 required
+                minLength={6}
               />
             </div>
             
@@ -308,17 +333,24 @@ const CafeVoltaireApp: React.FC = () => {
             
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full bg-amber-900 text-white font-semibold py-3 rounded-xl hover:bg-amber-800 transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isSubmitting ? (isSignup ? 'Creating account...' : 'Signing in...') : (isSignup ? 'Sign Up' : 'Sign In')}
             </button>
           </form>
           
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-            <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-            <p className="text-xs text-blue-800">Email: john@example.com</p>
-            <p className="text-xs text-blue-800">Password: password123</p>
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignup(!isSignup);
+                setError('');
+              }}
+              className="text-sm text-amber-900 hover:underline"
+            >
+              {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </button>
           </div>
         </div>
       </div>
@@ -331,7 +363,7 @@ const CafeVoltaireApp: React.FC = () => {
         <div>
           <p className="text-amber-800 text-sm font-medium mb-1">WELCOME BACK</p>
           <h1 className="text-4xl font-bold text-amber-950 leading-tight">
-            {user?.name || 'Guest'}
+            {firebaseUser?.displayName || firebaseUser?.email?.split('@')[0] || 'Guest'}
           </h1>
         </div>
         <button
@@ -343,27 +375,66 @@ const CafeVoltaireApp: React.FC = () => {
       </div>
 
       <div className="px-6">
-        <p className="text-amber-800 text-sm font-medium mb-1">LIMITED TIME</p>
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-amber-800 text-sm font-medium">LIMITED TIME</p>
+          <img
+            src="/Cafe_logo.png"
+            alt="Cafe Voltaire"
+            className="w-16"
+          />
+        </div>
         <h2 className="text-5xl font-bold text-amber-950 leading-tight">
           ICED LATTE<br />IS BACK
         </h2>
+        <img
+          src="/iced_coffee.png"
+          alt="Iced coffee"
+          className="w-3/5 mx-auto my-4 drop-shadow-lg"
+        />
       </div>
 
       <div className="overflow-x-auto scrollbar-hide">
         <div className="flex gap-4 px-6">
-          {promoCards.map((card, idx) => (
-            <div
-              key={idx}
-              className={`flex-shrink-0 bg-gradient-to-br ${card.bgColor} rounded-2xl p-6 shadow-sm`}
-              style={{ width: "80vw", maxWidth: "320px" }}
-            >
-              <p className="text-amber-800 text-xs font-semibold mb-2 uppercase tracking-wide">
-                {card.subtitle}
-              </p>
-              <h2 className="text-3xl font-bold text-amber-950 mb-4">{card.title}</h2>
-              <div className="h-32 bg-white/40 rounded-xl"></div>
-            </div>
-          ))}
+          {promoCards.map((card, idx) => {
+            const { bgClass, imageSrc, alt } =
+              card.title === "ICED LATTE"
+                ? {
+                    bgClass: "bg-amber-100",
+                    imageSrc: "/matcha1.png",
+                    alt: "Matcha latte",
+                  }
+                : card.title === "CAPPUCCINO"
+                ? {
+                    bgClass: "bg-white/40",
+                    imageSrc: "/cappuccino.png",
+                    alt: "Cappuccino",
+                  }
+                : card.title === "SWEET CREPES"
+                ? {
+                    bgClass: "bg-white/40",
+                    imageSrc: "/crepe.png",
+                    alt: "Crepe",
+                  }
+                : { bgClass: "bg-white/40", imageSrc: null, alt: "" };
+
+            return (
+              <div
+                key={idx}
+                className={`flex-shrink-0 bg-gradient-to-br ${card.bgColor} rounded-2xl p-6 shadow-sm`}
+                style={{ width: "80vw", maxWidth: "320px" }}
+              >
+                <p className="text-amber-800 text-xs font-semibold mb-2 uppercase tracking-wide">
+                  {card.subtitle}
+                </p>
+                <h2 className="text-3xl font-bold text-amber-950 mb-4">{card.title}</h2>
+                <div className={`h-32 rounded-xl overflow-hidden flex items-center justify-center ${bgClass}`}>
+                  {imageSrc ? (
+                    <img src={imageSrc} alt={alt} className="h-full object-cover" />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -404,8 +475,16 @@ const CafeVoltaireApp: React.FC = () => {
     </div>
   );
 
-  const RewardsScreen = () => (
-    <div className="space-y-6">
+  const RewardsScreen = () => {
+    // Fetch points when Rewards screen is opened
+    useEffect(() => {
+      if (firebaseUser) {
+        fetchPointsFromBackend();
+      }
+    }, []); // Only run once when component mounts
+
+    return (
+      <div className="space-y-6">
       <div className="flex items-center gap-4 mb-8">
         <div className="w-16 h-16 bg-amber-900 rounded-full flex items-center justify-center flex-shrink-0">
           <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -415,21 +494,6 @@ const CafeVoltaireApp: React.FC = () => {
         <div>
           <p className="text-sm text-gray-600">You've got</p>
           <h1 className="text-4xl font-bold text-amber-950">{points} POINTS</h1>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-          TEST FEATURES
-        </h3>
-        <div className="text-center py-8 bg-white rounded-2xl border border-gray-200">
-          <p className="text-gray-600 mb-4">Test QR code scanning from Firestore</p>
-          <button
-            onClick={earnPoints}
-            className="px-6 py-3 bg-amber-900 text-white font-semibold rounded-full hover:bg-amber-800 transition-colors"
-          >
-            + EARN POINTS FROM QR (TEST)
-          </button>
         </div>
       </div>
 
@@ -470,19 +534,21 @@ const CafeVoltaireApp: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const ScanScreen = () => {
     const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);
 
     useEffect(() => {
+      if (!firebaseUser) return;
+      
       // If scanner already exists, don't create another one
       if (scannerRef.current) {
         return;
       }
 
       // Manual cleanup: Ensure the container is empty before rendering the scanner
-      // This helps with React Strict Mode where cleanup might be async or incomplete
       const readerElement = document.getElementById("reader");
       if (readerElement) {
         readerElement.innerHTML = "";
@@ -506,14 +572,18 @@ const CafeVoltaireApp: React.FC = () => {
         }
 
         try {
-          const newTotal = await addPointsFromQr(decodedText);
+          if (!firebaseUser) {
+            alert("You must be logged in to scan QR codes");
+            return;
+          }
+          const newTotal = await addPointsFromQr(firebaseUser.uid, decodedText);
           setPoints(newTotal);
           alert(`Success! You earned points. Total: ${newTotal}`);
+          // Also update backend
+          await fetchPointsFromBackend();
         } catch (err: any) {
           console.error("Scan error:", err);
           alert(err.message || "Failed to add points");
-          // Ideally we might want to re-initialize scanner here if they want to scan again
-          // But for now, let's leave it cleared or reload the page/component
         }
       };
 
@@ -532,7 +602,7 @@ const CafeVoltaireApp: React.FC = () => {
           scannerRef.current = null;
         }
       };
-    }, []);
+    }, [firebaseUser]);
 
     return (
       <div className="flex flex-col items-center space-y-8">
@@ -542,7 +612,7 @@ const CafeVoltaireApp: React.FC = () => {
         </div>
 
         <div className="w-full max-w-sm bg-white rounded-3xl p-4 border border-gray-200 shadow-lg">
-          <div id="reader" width="100%"></div>
+          <div id="reader" style={{ width: "100%" }}></div>
         </div>
 
         <div className="text-center">
@@ -585,6 +655,18 @@ const CafeVoltaireApp: React.FC = () => {
       </div>
     </div>
   );
+
+  // Show loading screen while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-amber-950 mb-4">CAFÉ VOLTAIRE</h1>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show login screen if not authenticated
   if (!isAuthenticated) {
