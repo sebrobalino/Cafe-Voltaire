@@ -1,0 +1,14 @@
+[
+  {
+    "codeId": "COFFEE_BOOST_1",
+    "productId": "any-coffee-item",
+    "pointValue": 25,
+    "description": "25 extra points on any coffee purchase"
+  },
+  {
+    "codeId": "LUNCH_SPECIAL_50",
+    "productId": "daily-special-lunch",
+    "pointValue": 50,
+    "description": "50 bonus points for trying our lunch special"
+  }
+]
