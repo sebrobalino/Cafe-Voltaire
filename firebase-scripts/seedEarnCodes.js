@@ -40,7 +40,7 @@ async function main() {
   // Default batch – edit however you want
   const codes = [
     { id: "COFFEE_BOOST_1", pointValue: 25 },
-    { id: "WELCOME_5", pointValue: 5 },
+    { id: "WELCOME_500", pointValue: 500 },
     { id: "HAPPY_HOUR_10", pointValue: 10 },
   ];
 
